@@ -12,8 +12,6 @@ from tensorflow.keras.models import load_model
 
 
 # In[21]:
-
-logreg_model = joblib.load('logregmodel.pkl')
 ANN_model = load_model('ANNmodel.h5')
 
 
@@ -43,18 +41,10 @@ if submit_button:
 
     # Prepare the input data as a feature vector
     input_data = [age, hypertension, heart_disease, average_glucose_level]
-
-    # Make predictions using the logistic regression model
-    logreg_prediction = logreg_model.predict([input_data])[0]
-    logreg_probabilities = logreg_model.predict_proba([input_data])[0]
-    logreg_percentage = logreg_probabilities[1] * 100
     
     # Make predictions using the ANN model
     ann_prediction = ann_model.predict([input_data])[0][0] * 100
     
-    # Display the results
-    st.write(f"Logistic Regression Prediction: {logreg_prediction}")
-    st.write(f"Logistic Regression Probability: {logreg_percentage:.2f}%")
     st.write(f"ANN Prediction: {ann_prediction:.2f}%")
 
 # <a style='text-decoration:none;line-height:16px;display:flex;color:#5B5B62;padding:10px;justify-content:end;' href='https://deepnote.com?utm_source=created-in-deepnote-cell&projectId=208cc3da-360d-4089-bf87-acb8020d29e8' target="_blank">
