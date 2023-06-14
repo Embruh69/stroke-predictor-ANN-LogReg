@@ -69,7 +69,9 @@ submit_button = st.button("Calculate")
 if submit_button:
     input_data = [age, hyTen, heart, agl]
 
-    logistic_regression_prediction = logregmodel.predict_proba([input_data])[0][1] * 100
+    logreg_prediction = logregmodel.predict([input_data])[0]
+    logreg_probabilities = logregmodel.predict_proba([input_data])[0]
+    logreg_percentage = logreg_probabilities[1] * 100
     ann_prediction = ANN_model.predict([input_data])[0][0] * 100
     
     st.write(f"Logistic Regression Prediction: {logistic_regression_prediction:.2f}%")
