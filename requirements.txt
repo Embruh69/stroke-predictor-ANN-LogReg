@@ -1,7 +1,7 @@
 xgboost==1.7.5
 matplotlib
 imblearn
-
+seaborn
 joblib
 wget==3.2
 protobuf==3.20
