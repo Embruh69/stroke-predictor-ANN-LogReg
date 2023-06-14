@@ -7,6 +7,9 @@
 
 
 import pandas as pd
+import joblib
+import urllib.request
+import io
 import numpy as np
 import joblib
 import wget
@@ -27,22 +30,6 @@ from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense
 from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.keras import regularizers
-
-
-# In[13]:
-
-
-import joblib
-
-import pandas as pd
-import numpy as np
-
-import urllib.request
-
-import boto3
-from botocore.config import Config
-from botocore import UNSIGNED
-import io
 
 
 # In[21]:
