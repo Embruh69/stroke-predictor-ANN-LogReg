@@ -15,7 +15,7 @@ import joblib
 import wget
 import streamlit as st
 from tensorflow.keras.models import load_model
-from sklearn.metrics import accuracy_score, confusion_matrix, roc_auc_score, ConfusionMatrixDisplay, precision_score, recall_score, f1_score, classification_report, roc_curve, RocCurveDisplay, auc, precision_recall_curve, plot_precision_recall_curve, average_precision_score
+from sklearn.metrics import accuracy_score, roc_auc_score, ConfusionMatrixDisplay, precision_score, recall_score, f1_score, classification_report, RocCurveDisplay, auc, average_precision_score
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split,cross_val_score, GridSearchCV
 from sklearn.linear_model import LogisticRegression
