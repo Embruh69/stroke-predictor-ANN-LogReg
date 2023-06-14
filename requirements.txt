@@ -3,3 +3,4 @@ joblib
 wget==3.2
 protobuf==3.19
 tensorflow
+sklearn
