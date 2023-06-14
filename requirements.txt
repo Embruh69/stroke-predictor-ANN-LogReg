@@ -1,6 +1,6 @@
 imblearn
 joblib
 wget==3.2
-protobuf==3.19
+protobuf~=3.19.0
 tensorflow
 sklearn
