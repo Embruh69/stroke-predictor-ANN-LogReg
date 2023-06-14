@@ -13,10 +13,7 @@ from tensorflow.keras.models import load_model
 
 # In[21]:
 
-logreg_model = LogisticRegression()
-logreg_model.fit(X_train, y_train)
-
-logreg_model = joblib.dump(logreg_model, 'logregmodel.pkl')
+logreg_model = joblib.load('logregmodel.pkl')
 ANN_model = load_model('ANNmodel.h5')
 
 
