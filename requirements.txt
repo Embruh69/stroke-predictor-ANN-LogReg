@@ -1,5 +1,5 @@
 xgboost==1.7.5
-matplotlib.pyplot
+matplotlib
 imblearn
 
 joblib
