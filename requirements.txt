@@ -4,5 +4,4 @@ imblearn
 
 joblib
 wget==3.2
-streamlit
 protobuf==3.20
