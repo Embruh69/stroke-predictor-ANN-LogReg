@@ -12,7 +12,7 @@ from tensorflow.keras.models import load_model
 
 
 # In[21]:
-ANN_model = load_model('ANNmodel.h5')
+ann_model = load_model('ANNmodel.h5')
 
 
 # In[22]:
