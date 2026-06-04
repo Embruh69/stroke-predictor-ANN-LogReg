@@ -1,54 +1,168 @@
-#!/usr/bin/env python
-# coding: utf-8
-
-# ## Model Deployment
-
-# In[18]:
-
-
 import streamlit as st
 import joblib
-from tensorflow.keras.models import load_model
+import pandas as pd
+import numpy as np
 
+# ── Page config ────────────────────────────────────────────────────────────────
+st.set_page_config(
+    page_title="Stroke Risk Predictor",
+    page_icon="🧠",
+    layout="centered"
+)
 
-# In[21]:
-ann_model = load_model('ANNmodel.h5')
+# ── Load models ────────────────────────────────────────────────────────────────
+@st.cache_resource
+def load_models():
+    lr        = joblib.load('lr_stroke_model.pkl')
+    rf        = joblib.load('rf_stroke_model.pkl')
+    features  = joblib.load('model_features.pkl')
+    thresholds = joblib.load('model_thresholds.pkl')
+    return lr, rf, features, thresholds
 
+lr_model, rf_model, FEATURES, THRESHOLDS = load_models()
 
-# In[22]:
+# ── Feature engineering (must mirror notebook) ─────────────────────────────────
+def build_features(raw: dict) -> pd.DataFrame:
+    row = pd.DataFrame([raw])
+    row['age_glucose'] = row['age'] * row['avg_glucose_level']
+    row['age_bmi']     = row['age'] * row['bmi']
+    row['age_squared'] = row['age'] ** 2
+    row['risk_score']  = (
+        row['hypertension'] +
+        row['heart_disease'] +
+        (row['avg_glucose_level'] > 140).astype(int) +
+        (row['bmi'] > 30).astype(int)
+    )
+    row['age_bin']     = pd.cut(row['age'], bins=[0, 40, 55, 65, 100],
+                                 labels=[0, 1, 2, 3]).astype(int)
+    row['glucose_bmi'] = row['avg_glucose_level'] * row['bmi']
+    row['cardio_risk'] = (
+        row['hypertension'] +
+        row['heart_disease'] +
+        row['smoking_status'].clip(lower=0)
+    )
+    return row[FEATURES]
 
-
-st.title("Stroke Risk Predictor")
-
-age = st.number_input('Age', min_value=1, max_value=150, value=30)
-average_glucose_level = st.slider('Average Glucose Level', 50, 400, 100)
-heart_disease = st.selectbox('Heart Disease', ["No", "Yes"])
-hypertension = st.selectbox('Hypertension', ["No", "Yes"])
-
-submit_button = st.button("Calculate")
-
-if submit_button:
-    # Convert categorical inputs to numerical values
-    if heart_disease == "Yes":
-        heart_disease = 1
+def predict_risk(model, threshold, input_df):
+    prob = model.predict_proba(input_df)[0][1]
+    pct  = round(prob * 100, 2)
+    pred = int(prob >= threshold)
+    if pct < 10:
+        label, color = "Low Risk",        "#2ecc71"
+    elif pct < 25:
+        label, color = "Moderate Risk",   "#f39c12"
+    elif pct < 50:
+        label, color = "High Risk",       "#e67e22"
     else:
-        heart_disease = 0
-    
-    if hypertension == "Yes":
-        hypertension = 1
+        label, color = "Very High Risk",  "#e74c3c"
+    return pct, label, color, pred
+
+# ── UI ─────────────────────────────────────────────────────────────────────────
+st.title("🧠 Stroke Risk Predictor")
+st.markdown("Fill in the patient information below to estimate stroke risk.")
+
+st.divider()
+
+# ── Input form ─────────────────────────────────────────────────────────────────
+col1, col2 = st.columns(2)
+
+with col1:
+    st.subheader("Demographics")
+    age = st.number_input("Age", min_value=1, max_value=120, value=45)
+    gender = st.selectbox("Gender", ["Male", "Female"])
+    ever_married = st.selectbox("Ever Married", ["Yes", "No"])
+    work_type = st.selectbox(
+        "Work Type",
+        ["Private", "Self-employed", "Government Job", "Children", "Never Worked"]
+    )
+    residence = st.selectbox("Residence Type", ["Urban", "Rural"])
+
+with col2:
+    st.subheader("Health Indicators")
+    hypertension  = st.selectbox("Hypertension",   ["No", "Yes"])
+    heart_disease = st.selectbox("Heart Disease",   ["No", "Yes"])
+    avg_glucose   = st.slider("Avg Glucose Level (mg/dL)", 50, 400, 100)
+    bmi           = st.number_input("BMI", min_value=10.0, max_value=70.0, value=25.0, step=0.1)
+    smoking       = st.selectbox(
+        "Smoking Status",
+        ["Never Smoked", "Formerly Smoked", "Smokes", "Unknown"]
+    )
+
+st.divider()
+model_choice = st.radio(
+    "Select prediction model",
+    ["Logistic Regression", "Random Forest", "Both"],
+    horizontal=True
+)
+st.divider()
+
+# ── Encode inputs ──────────────────────────────────────────────────────────────
+def encode_inputs():
+    return {
+        'gender':            0 if gender == "Male" else 1,
+        'age':               age,
+        'hypertension':      1 if hypertension == "Yes" else 0,
+        'heart_disease':     1 if heart_disease == "Yes" else 0,
+        'ever_married':      1 if ever_married == "Yes" else 0,
+        'work_type':         {"Private": 0, "Self-employed": 1,
+                              "Government Job": 2, "Children": -1, "Never Worked": -2}[work_type],
+        'Residence_type':    1 if residence == "Urban" else 0,
+        'avg_glucose_level': avg_glucose,
+        'bmi':               bmi,
+        'smoking_status':    {"Never Smoked": 0, "Formerly Smoked": 1,
+                              "Smokes": 2, "Unknown": -1}[smoking],
+    }
+
+# ── Risk gauge helper ──────────────────────────────────────────────────────────
+def show_result(name: str, pct: float, label: str, color: str):
+    st.markdown(f"#### {name}")
+    bar_pct = min(pct, 100)
+    st.markdown(
+        f"""
+        <div style='background:#eee;border-radius:8px;overflow:hidden;height:28px;margin-bottom:6px'>
+          <div style='width:{bar_pct}%;background:{color};height:100%;
+                      display:flex;align-items:center;padding-left:10px;
+                      color:white;font-weight:bold;font-size:14px;border-radius:8px;
+                      min-width:60px'>
+            {pct:.1f}%
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+    st.markdown(
+        f"<span style='color:{color};font-weight:bold;font-size:18px'>{label}</span>",
+        unsafe_allow_html=True
+    )
+    st.caption(f"Raw probability: {pct:.2f}%")
+
+# ── Predict ────────────────────────────────────────────────────────────────────
+if st.button("Calculate Stroke Risk", type="primary", use_container_width=True):
+    raw     = encode_inputs()
+    inp_df  = build_features(raw)
+
+    st.subheader("Prediction Results")
+
+    if model_choice == "Both":
+        c1, c2 = st.columns(2)
+        with c1:
+            pct, label, color, _ = predict_risk(lr_model, THRESHOLDS['lr'], inp_df)
+            show_result("Logistic Regression", pct, label, color)
+        with c2:
+            pct, label, color, _ = predict_risk(rf_model, THRESHOLDS['rf'], inp_df)
+            show_result("Random Forest", pct, label, color)
+
+    elif model_choice == "Logistic Regression":
+        pct, label, color, _ = predict_risk(lr_model, THRESHOLDS['lr'], inp_df)
+        show_result("Logistic Regression", pct, label, color)
+
     else:
-        hypertension = 0
+        pct, label, color, _ = predict_risk(rf_model, THRESHOLDS['rf'], inp_df)
+        show_result("Random Forest", pct, label, color)
 
-    # Prepare the input data as a feature vector
-    input_data = [age, hypertension, heart_disease, average_glucose_level]
-    
-    # Make predictions using the ANN model
-    ann_prediction = ann_model.predict([input_data])[0][0] * 100
-    ann_confidence = ann_prediction * 100
-    
-    st.write(f"<h1 style='font-size: 36px;'><b> ANN Prediction: {ann_prediction:.2f}% </b></h1>", unsafe_allow_html=True)
-    st.write(f"ANN confidence: {ann_confidence:.2f}% Model Confidence")
-
-# <a style='text-decoration:none;line-height:16px;display:flex;color:#5B5B62;padding:10px;justify-content:end;' href='https://deepnote.com?utm_source=created-in-deepnote-cell&projectId=208cc3da-360d-4089-bf87-acb8020d29e8' target="_blank">
-# <img alt='Created in deepnote.com' style='display:inline;max-height:16px;margin:0px;margin-right:7.5px;' src='data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiPz4KPHN2ZyB3aWR0aD0iODBweCIgaGVpZ2h0PSI4MHB4IiB2aWV3Qm94PSIwIDAgODAgODAiIHZlcnNpb249IjEuMSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiB4bWxuczp4bGluaz0iaHR0cDovL3d3dy53My5vcmcvMTk5OS94bGluayI+CiAgICA8IS0tIEdlbmVyYXRvcjogU2tldGNoIDU0LjEgKDc2NDkwKSAtIGh0dHBzOi8vc2tldGNoYXBwLmNvbSAtLT4KICAgIDx0aXRsZT5Hcm91cCAzPC90aXRsZT4KICAgIDxkZXNjPkNyZWF0ZWQgd2l0aCBTa2V0Y2guPC9kZXNjPgogICAgPGcgaWQ9IkxhbmRpbmciIHN0cm9rZT0ibm9uZSIgc3Ryb2tlLXdpZHRoPSIxIiBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPgogICAgICAgIDxnIGlkPSJBcnRib2FyZCIgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoLTEyMzUuMDAwMDAwLCAtNzkuMDAwMDAwKSI+CiAgICAgICAgICAgIDxnIGlkPSJHcm91cC0zIiB0cmFuc2Zvcm09InRyYW5zbGF0ZSgxMjM1LjAwMDAwMCwgNzkuMDAwMDAwKSI+CiAgICAgICAgICAgICAgICA8cG9seWdvbiBpZD0iUGF0aC0yMCIgZmlsbD0iIzAyNjVCNCIgcG9pbnRzPSIyLjM3NjIzNzYyIDgwIDM4LjA0NzY2NjcgODAgNTcuODIxNzgyMiA3My44MDU3NTkyIDU3LjgyMTc4MjIgMzIuNzU5MjczOSAzOS4xNDAyMjc4IDMxLjY4MzE2ODMiPjwvcG9seWdvbj4KICAgICAgICAgICAgICAgIDxwYXRoIGQ9Ik0zNS4wMDc3MTgsODAgQzQyLjkwNjIwMDcsNzYuNDU0OTM1OCA0Ny41NjQ5MTY3LDcxLjU0MjI2NzEgNDguOTgzODY2LDY1LjI2MTk5MzkgQzUxLjExMjI4OTksNTUuODQxNTg0MiA0MS42NzcxNzk1LDQ5LjIxMjIyODQgMjUuNjIzOTg0Niw0OS4yMTIyMjg0IEMyNS40ODQ5Mjg5LDQ5LjEyNjg0NDggMjkuODI2MTI5Niw0My4yODM4MjQ4IDM4LjY0NzU4NjksMzEuNjgzMTY4MyBMNzIuODcxMjg3MSwzMi41NTQ0MjUgTDY1LjI4MDk3Myw2Ny42NzYzNDIxIEw1MS4xMTIyODk5LDc3LjM3NjE0NCBMMzUuMDA3NzE4LDgwIFoiIGlkPSJQYXRoLTIyIiBmaWxsPSIjMDAyODY4Ij48L3BhdGg+CiAgICAgICAgICAgICAgICA8cGF0aCBkPSJNMCwzNy43MzA0NDA1IEwyNy4xMTQ1MzcsMC4yNTcxMTE0MzYgQzYyLjM3MTUxMjMsLTEuOTkwNzE3MDEgODAsMTAuNTAwMzkyNyA4MCwzNy43MzA0NDA1IEM4MCw2NC45NjA0ODgyIDY0Ljc3NjUwMzgsNzkuMDUwMzQxNCAzNC4zMjk1MTEzLDgwIEM0Ny4wNTUzNDg5LDc3LjU2NzA4MDggNTMuNDE4MjY3Nyw3MC4zMTM2MTAzIDUzLjQxODI2NzcsNTguMjM5NTg4NSBDNTMuNDE4MjY3Nyw0MC4xMjg1NTU3IDM2LjMwMzk1NDQsMzcuNzMwNDQwNSAyNS4yMjc0MTcsMzcuNzMwNDQwNSBDMTcuODQzMDU4NiwzNy43MzA0NDA1IDkuNDMzOTE5NjYsMzcuNzMwNDQwNSAwLDM3LjczMDQ0MDUgWiIgaWQ9IlBhdGgtMTkiIGZpbGw9IiMzNzkzRUYiPjwvcGF0aD4KICAgICAgICAgICAgPC9nPgogICAgICAgIDwvZz4KICAgIDwvZz4KPC9zdmc+' > </img>
-# Created in <span style='font-weight:600;margin-left:4px;'>Deepnote</span></a>
+    st.divider()
+    st.markdown(
+        "⚠️ **Disclaimer:** This tool is for informational purposes only and does "
+        "not constitute medical advice. Please consult a qualified healthcare "
+        "professional for diagnosis and treatment."
+    )
